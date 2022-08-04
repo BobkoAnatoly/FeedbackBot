@@ -10,3 +10,6 @@ C:\Users\User\source\repos\FeedbackBot\BusinesLogic\obj\Debug\net6.0\BusinesLogi
 C:\Users\User\source\repos\FeedbackBot\BusinesLogic\obj\Debug\net6.0\refint\BusinesLogic.dll
 C:\Users\User\source\repos\FeedbackBot\BusinesLogic\obj\Debug\net6.0\BusinesLogic.pdb
 C:\Users\User\source\repos\FeedbackBot\BusinesLogic\obj\Debug\net6.0\ref\BusinesLogic.dll
+C:\Users\User\source\repos\FeedbackBot\BusinesLogic\bin\Debug\net6.0\Model.dll
+C:\Users\User\source\repos\FeedbackBot\BusinesLogic\bin\Debug\net6.0\Model.pdb
+C:\Users\User\source\repos\FeedbackBot\BusinesLogic\obj\Debug\net6.0\BusinesLogic.csproj.CopyComplete
