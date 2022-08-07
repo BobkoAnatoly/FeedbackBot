@@ -8,20 +8,28 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.InlineQueryResults;
 using Telegram.Bot.Types.ReplyMarkups;
-using Telegram.Bot.Types.ReplyMarkups;
 
 namespace BusinesLogic.Services.Implementations
 {
     public class HandleUpdateService : IHandleUpdateService
     {
-        int count = 1;
-        private ApplicationDatabaseContext context;
+        int PageNumber = 1;
+        bool readBtnIsChecked = false;
+        bool writeBtnIsChecked = false;
+        bool DataIsFilled = false;
+        bool IsReadyForWritingFeedback = false;
+        Professor SelectedProfessor;
+        private readonly ApplicationDatabaseContext _context;
         private ITelegramBotClient _botClient;
-        private CancellationToken cancellationToken;
-        public HandleUpdateService()
+        private readonly IProfessorsService _professorsSrvice;
+        private readonly IFeedbackService _feedbackService;
+        public HandleUpdateService(ApplicationDatabaseContext context,
+            IProfessorsService professorsSrvice,
+            IFeedbackService feedbackService)
         {
-            cancellationToken = new();
-            context = new ApplicationDatabaseContext();
+            _context = context;
+            _professorsSrvice = professorsSrvice;
+            _feedbackService = feedbackService;
         }
         public async Task EchoAsync(Update update, ITelegramBotClient client)
         {
@@ -31,9 +39,6 @@ namespace BusinesLogic.Services.Implementations
                 UpdateType.Message => BotOnMessageReceived(update.Message!),
                 UpdateType.EditedMessage => BotOnMessageReceived(update.EditedMessage!),
                 UpdateType.CallbackQuery => BotOnCallbackQueryReceived(update.CallbackQuery!),
-                UpdateType.InlineQuery => BotOnInlineQueryReceived(update.InlineQuery!),
-                UpdateType.ChosenInlineResult => BotOnChosenInlineResultReceived(update.ChosenInlineResult!),
-                _ => UnknownUpdateHandlerAsync(update)
             };
 
             try
@@ -48,20 +53,85 @@ namespace BusinesLogic.Services.Implementations
 
         private async Task<Message> BotOnCallbackQueryReceived(CallbackQuery callbackQuery)
         {
-            count+=1;
-            List<Professor> professors = context.Professors.AsNoTracking().ToList();
-            string s = "";
-            if (int.Parse(callbackQuery.Data) is int)
-            {
-                for (int i = int.Parse(callbackQuery.Data); i < 50; i++)
-                {
 
-                    s += i + 1 + " " + professors[i].FirstName + professors[i].LastName + professors[i].Patronymic + "\n";
-                }
-                await _botClient.EditMessageTextAsync(callbackQuery.InlineMessageId, s);
+            if (callbackQuery.Data == "<<")
+            {
+                var action = BackPage(_botClient, callbackQuery);
+                Message sentMessage = await action;
+                return sentMessage;
+
             }
-            return await _botClient.SendTextMessageAsync(callbackQuery.Message.Chat.Id, "fewfew");
+            if (callbackQuery.Data == ">>")
+            {
+                var action = NextPage(_botClient, callbackQuery);
+                Message sentMessage = await action;
+                return sentMessage;
+            }
+            return null;
+
+            async Task<Message> BackPage(ITelegramBotClient bot, CallbackQuery callbackQuery)
+            {
+                readBtnIsChecked = true;
+                string text;
+                if (PageNumber > 1)
+                {
+                    InlineKeyboardMarkup inlineKeyboard = new(
+                    new[]
+                    {
+                        new []
+                        {
+                            InlineKeyboardButton.WithCallbackData("<<", "<<"),
+                            InlineKeyboardButton.WithCallbackData(">>", ">>"),
+                        }
+                    });
+                    if (DataIsFilled)
+                    {
+                        PageNumber -= 1;
+                        text = _feedbackService.Get(SelectedProfessor.Id, PageNumber);
+                        return await _botClient.EditMessageTextAsync(callbackQuery.Message.Chat.Id, callbackQuery.Message.MessageId, text, replyMarkup: inlineKeyboard);
+
+                    }
+
+                    PageNumber -= 1;
+                    text = _professorsSrvice.GetProfessors(PageNumber);
+                    return await _botClient.EditMessageTextAsync(callbackQuery.Message.Chat.Id, callbackQuery.Message.MessageId, text, replyMarkup: inlineKeyboard);
+                }
+                return null;
+            }
+            async Task<Message> NextPage(ITelegramBotClient bot, CallbackQuery callbackQuery)
+            {
+                readBtnIsChecked = true;
+                string text;
+                InlineKeyboardMarkup inlineKeyboard = new(
+                    new[]
+                    {
+                        new []
+                        {
+                            InlineKeyboardButton.WithCallbackData("<<", "<<"),
+                            InlineKeyboardButton.WithCallbackData(">>", ">>"),
+                        }
+                    });
+                if (DataIsFilled && PageNumber < _feedbackService.GetCountOfPages())
+                {
+                    PageNumber += 1;
+                    text = _feedbackService.Get(SelectedProfessor.Id, PageNumber);
+                    return await _botClient.EditMessageTextAsync(callbackQuery.Message.Chat.Id, callbackQuery.Message.MessageId, text, replyMarkup: inlineKeyboard);
+                }
+
+                if (PageNumber < CheckNumOfPages())
+                {
+                    PageNumber += 1;
+                    text = _professorsSrvice.GetProfessors(PageNumber);
+                    return await _botClient.EditMessageTextAsync(callbackQuery.Message.Chat.Id, callbackQuery.Message.MessageId, text, replyMarkup: inlineKeyboard);
+                }
+                return null;
+            }
+            int CheckNumOfPages()
+            {
+                return Convert.ToInt32(Math.Round((double)_professorsSrvice.GetCountOfProfessors() / 20));
+            }
         }
+
 
         private async Task BotOnMessageReceived(Message message)
         {
@@ -70,79 +140,129 @@ namespace BusinesLogic.Services.Implementations
             var action = message.Text switch
             {
                 "/start" => SendStartButtonsAsync(_botClient, message),
-                "Читать отзывы" => ShowProfessorList(_botClient, message,1),
-                //"/keyboard" => SendReplyKeyboard(_botClient, message),
-                //"/remove" => RemoveKeyboard(_botClient, message),
+                "Читать отзывы" => ShowProfessorList(_botClient, message),
+                "Оставить отзыв" => ShowProfessorList(_botClient, message),
+                "Меню" => SendStartButtonsAsync(_botClient, message),
+                //"Назад" => RemoveKeyboard(_botClient, message),
                 //"/photo" => SendFile(_botClient, message),
                 //"/request" => RequestContactAndLocation(_botClient, message),
                 _ => Usage(_botClient, message)
             };
             Message sentMessage = await action;
-        }
 
-        private async Task<Message> ShowProfessorList(ITelegramBotClient botClient, Message message,int? count)
+            async Task<Message> SendStartButtonsAsync(ITelegramBotClient bot, Message message)
+            {
+                DataIsFilled = false;
+                readBtnIsChecked = false;
+                writeBtnIsChecked = false;
+                ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup(new[]
+                {
+                new KeyboardButton[]{"Читать отзывы","Оставить отзыв"}
+                })
+                { ResizeKeyboard = true };
+                return await bot.SendTextMessageAsync(message.Chat.Id, text: "Выберите", replyMarkup: keyboardMarkup);
+            }
+
+            async Task<Message> Usage(ITelegramBotClient bot, Message message)
+            {
+                if (writeBtnIsChecked)
+                {
+                    if (IsReadyForWritingFeedback)
+                    {
+                        var IsCreated = _feedbackService.Create(message, SelectedProfessor.Id);
+                    }
+                    var professor = _professorsSrvice.Get(message.Text);
+                    SelectedProfessor = professor;
+                    if (professor == null)
+                    {
+                        return await bot.SendTextMessageAsync(message.Chat.Id, "Преподавалель не найден.");
+                    }
+                    else
+                    {
+                        string caption = $"{professor.LastName} {professor.FirstName} {professor.Patronymic} \n" +
+                            $"Рейтинг: {_feedbackService.GetRaiting(professor.Id)}";
+                        await bot.SendPhotoAsync(message.Chat.Id, photo: professor.PhotoPath, caption: caption);
+                        string feedbackExample = "--Шаблон отзыва--\n" +
+                            "Лекции: \n" +
+                            "Практические занятия:\n" +
+                            "Конспект:\n" +
+                            "Зачёт\\экзамен:\n" +
+                            "Общее впечатление:\n";
+                        return await bot.SendTextMessageAsync(message.Chat.Id, feedbackExample);
+
+                    }
+
+                }
+                if (readBtnIsChecked)
+                {
+                    var professor = _professorsSrvice.Get(message.Text);
+                    if (professor == null)
+                    {
+                        return await bot.SendTextMessageAsync(message.Chat.Id, "Преподавалель не найден.");
+                    }
+                    else
+                    {
+                        if (professor.Feedbacks.Count == 0)
+                        {
+                            return await bot.SendTextMessageAsync(message.Chat.Id, "Не найдено отзывов о преподавателе.");
+                        }
+                        DataIsFilled = true;
+                        SelectedProfessor = professor;
+                        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup(new[]
+                        {
+                        new KeyboardButton[]{"Меню"}
+                        })
+                        { ResizeKeyboard = true };
+                        string caption = $"{professor.LastName} {professor.FirstName} {professor.Patronymic} \n" +
+                            $"Рейтинг: {_feedbackService.GetRaiting(professor.Id)}";
+                        await bot.SendPhotoAsync(message.Chat.Id, photo: professor.PhotoPath, caption: caption, replyMarkup: keyboardMarkup);
+
+                        return await ShowFeedbackList(bot, message, professor.Id);
+                    }
+                }
+                return await bot.SendTextMessageAsync(message.Chat.Id, "123");
+            }
+        }
+        private async Task<Message> ShowFeedbackList(ITelegramBotClient botClient, Message message, int professorId)
         {
+            PageNumber = 1;
             InlineKeyboardMarkup inlineKeyboard = new(
                 new[]
                 {
                     // first row
                     new []
                     {
-                        InlineKeyboardButton.WithCallbackData("<<", "0"),
-                        InlineKeyboardButton.WithCallbackData(">>", $"{20*count}"),
+                        InlineKeyboardButton.WithCallbackData("<<", "<<"),
+                        InlineKeyboardButton.WithCallbackData(">>", ">>"),
                     }
                 });
-            List<Professor> professors = context.Professors.AsNoTracking().ToList();
-            string s = "";
-            for (int i = 0; i < 20; i++)
-            {
 
-                s += i+1 +" "+ professors[i].FirstName + professors[i].LastName + professors[i].Patronymic + "\n";
-            } 
-            return await _botClient.SendTextMessageAsync(message.Chat.Id, s,replyMarkup:inlineKeyboard);
-            
+            string text = _feedbackService.Get(professorId, PageNumber);
+            return await _botClient.SendTextMessageAsync(message.Chat.Id, text, replyMarkup: inlineKeyboard);
+
         }
-
-        private async Task<Message> Usage(ITelegramBotClient bot, Message message)
+        private async Task<Message> ShowProfessorList(ITelegramBotClient botClient, Message message)
         {
-            //InlineKeyboardMarkup inlineKeyboard = new(
-            //    new[]
-            //    {
-            //        // first row
-            //        new []
-            //        {
-            //            InlineKeyboardButton.WithCallbackData("1.1", "11"),
-            //            InlineKeyboardButton.WithCallbackData("1.2", "12"),
-            //        },
-            //        // second row
-            //        new []
-            //        {
-            //            InlineKeyboardButton.WithCallbackData("2.1", "21"),
-            //            InlineKeyboardButton.WithCallbackData("2.2", "22"),
-            //        },
-            //    });
+            if (message.Text == "Читать отзывы")
+                readBtnIsChecked = true;
+            else
+                writeBtnIsChecked = true;
+            PageNumber = 1;
+            InlineKeyboardMarkup inlineKeyboard = new(
+                new[]
+                {
+                    // first row
+                    new []
+                    {
+                        InlineKeyboardButton.WithCallbackData("<<", "<<"),
+                        InlineKeyboardButton.WithCallbackData(">>", ">>"),
+                    }
+                });
+            string text = _professorsSrvice.GetProfessors(PageNumber);
+            await _botClient.SendTextMessageAsync(message.Chat.Id, text, replyMarkup: inlineKeyboard);
+            return await _botClient.SendTextMessageAsync(message.Chat.Id, "Введите фимилию и имя преподавателя");
 
-            //return await bot.SendTextMessageAsync(chatId: message.Chat.Id,
-            //                                      text: "Choose",
-            //                                      replyMarkup: inlineKeyboard);
-            //ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup(new[]
-            //{
-            //    new KeyboardButton[]{"Читать отзывы","Оставить отзыв"}
-            //})
-            //{ ResizeKeyboard = true};
-            return await bot.SendTextMessageAsync(message.Chat.Id,"123");
         }
-
-        private async Task<Message> SendStartButtonsAsync(ITelegramBotClient bot, Message message)
-        {
-            ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup(new[]
-            {
-                new KeyboardButton[]{"Читать отзывы","Оставить отзыв"}
-            })
-            { ResizeKeyboard = true};
-            return await bot.SendTextMessageAsync(message.Chat.Id, text: "Выберите", replyMarkup: keyboardMarkup);
-        }
-
 
         private Task HandleErrorAsync(Exception exception)
         {
@@ -153,32 +273,6 @@ namespace BusinesLogic.Services.Implementations
             };
 
             return Task.CompletedTask;
-        }
-        private Task UnknownUpdateHandlerAsync(Update update)
-        {
-            throw new NotImplementedException();
-        }
-
-        private Task BotOnChosenInlineResultReceived(ChosenInlineResult chosenInlineResult)
-        {
-            throw new NotImplementedException();
-        }
-
-        private async Task BotOnInlineQueryReceived(InlineQuery inlineQuery)
-        {
-            InlineQueryResult[] results = {
-            // displayed result
-            new InlineQueryResultArticle(
-                id: "3",
-                title: "TgBots",
-                inputMessageContent: new InputTextMessageContent(
-                    "hello"
-                ))};
-            await _botClient.AnswerInlineQueryAsync(inlineQueryId: inlineQuery.Id,
-                                                results: results,
-                                                isPersonal: true,
-                                                cacheTime: 0);
-
         }
 
     }

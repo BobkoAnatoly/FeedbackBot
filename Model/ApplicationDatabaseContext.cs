@@ -6,7 +6,8 @@ namespace Model
 {
     public class ApplicationDatabaseContext : DbContext
     {
-        public ApplicationDatabaseContext()
+        public ApplicationDatabaseContext(DbContextOptions<ApplicationDatabaseContext> options)
+            : base(options)
         {
             Database.EnsureCreated();
         }
@@ -14,9 +15,5 @@ namespace Model
         public DbSet<Professor> Professors { get; set; } = null!;
         public DbSet<Feedback> Feedbacks { get; set; } = null!;
 
-        protected override void OnConfiguring(DbContextOptionsBuilder builder)
-        {
-            builder.UseSqlServer("Server=localhost;Database=FeedbackBotDB;Trusted_Connection=True;TrustServerCertificate=True;");
-        }
     }
 }

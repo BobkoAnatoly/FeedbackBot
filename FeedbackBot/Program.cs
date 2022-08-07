@@ -12,11 +12,15 @@ using System.Web;
 using Microsoft.AspNetCore.Http;
 using System.Net;
 using Model;
+using Microsoft.EntityFrameworkCore;
+using AutoMapper;
+using BusinesLogic.Helpers.Mapper;
 
 namespace FeedbackBot
 {
     class Program
     {
+
         public static string GetFinalRedirect(string url)
         {
             if (string.IsNullOrWhiteSpace(url))
@@ -48,7 +52,6 @@ namespace FeedbackBot
 
                             if (newUrl.IndexOf("://", System.StringComparison.Ordinal) == -1)
                             {
-                                // Doesn't have a URL Schema, meaning it's a relative or absolute URL
                                 Uri u = new Uri(new Uri(url), newUrl);
                                 newUrl = u.ToString();
                             }
@@ -60,7 +63,6 @@ namespace FeedbackBot
                 }
                 catch (WebException)
                 {
-                    // Return the last known good URL
                     return newUrl;
                 }
                 catch (Exception ex)
@@ -76,14 +78,11 @@ namespace FeedbackBot
 
             return newUrl;
         }
-        static IHost host = Host.CreateDefaultBuilder()
-                .ConfigureServices((context, services) =>
-                {
-                    services.AddTransient<IHandleUpdateService, HandleUpdateService>();
-                    services.AddTransient<Update>();
-                })
-                .Build();
-        static void Main(string[] args)
+
+        public static HandleUpdateService handleService;
+
+        
+        public static void Main(string[] args)
         {
             #region MyRegion
 
@@ -182,17 +181,24 @@ namespace FeedbackBot
                 Console.WriteLine(ex.Message);
             }*/
             #endregion
-
+            var mappingConfig = new MapperConfiguration(mc => mc.AddProfile(new MappingProfile()));
+            IMapper mapper = mappingConfig.CreateMapper();
             var builder = new ConfigurationBuilder();
             BuildConfig(builder);
+            var config = builder.Build();
+            IHost host = Host.CreateDefaultBuilder()
+                .ConfigureServices((context, services) =>
+                {
+                    services.AddTransient<IHandleUpdateService, HandleUpdateService>();
+                    services.AddTransient<IProfessorsService, ProfessorsSrvice>();
+                    services.AddTransient<IFeedbackService, FeedbackService>();
+                    services.AddDbContext<ApplicationDatabaseContext>(options => options.UseSqlServer(config.GetConnectionString("DefaultConnection")));
+                    services.AddSingleton(mapper);
+                })
+                .Build();
+            HandleUpdateService handleService = ActivatorUtilities.CreateInstance<HandleUpdateService>(host.Services);
+            
 
-            Configure();
-
-
-            Console.ReadLine();
-        }
-        public static void Configure()
-        {
             string _token = "5457154768:AAEiqsRnu2V1IaJTmuomD7cbQQkm9r0ZGy8";
             ITelegramBotClient Bot;
             Bot = new TelegramBotClient(_token);
@@ -210,33 +216,29 @@ namespace FeedbackBot
             );
             Console.WriteLine("Запущен бот " + Bot.GetMeAsync().Result.FirstName);
 
+            async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+            {
+                await handleService.EchoAsync(update, botClient);
+                Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(update));
+            }
 
-            
+            async Task HandleErrorAsync(ITelegramBotClient botClient,
+            Exception exception,
+            CancellationToken cancellationToken)
+            {
 
+                Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(exception));
+            }
+
+            Console.ReadLine();
         }
-
+        
         static void BuildConfig(IConfigurationBuilder builder)
         {
             builder.SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                 .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json", optional: true)
                 .AddEnvironmentVariables();
-        }
-
-        public static async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
-        {
-            var svc = ActivatorUtilities.CreateInstance<HandleUpdateService>(host.Services);
-            await svc.EchoAsync(update,botClient);
-            Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(update));
-
-
-        }
-        public static async Task HandleErrorAsync(ITelegramBotClient botClient,
-            Exception exception,
-            CancellationToken cancellationToken)
-        {
-
-            Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(exception));
         }
     }
 }
