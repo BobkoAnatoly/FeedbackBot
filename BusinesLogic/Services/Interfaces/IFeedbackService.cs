@@ -1,5 +1,6 @@
 ﻿
 using Model.Models;
+using Telegram.Bot.Types;
 
 namespace BusinesLogic.Services.Interfaces
 {
@@ -8,6 +9,6 @@ namespace BusinesLogic.Services.Interfaces
         string Get(int professorId, int page);
         int GetRaiting(int professorId);
         int GetCountOfPages();
-        bool Create();
+        bool Create(Message message,int professorId,int professorRate);
     }
 }

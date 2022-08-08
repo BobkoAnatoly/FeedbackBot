@@ -55,13 +55,52 @@ namespace BusinesLogic.Services.Implementations
         {
             return (int)Math.Ceiling(GetFeedbacksCount()/FEEDBACKS_PER_PAGE);
         }
-        public bool Create(Message message,int professorId)
+        public bool Create(Message message,int professorId,int professorRate)
         {
-            
+            var IsValid = ValidateFeedback(message.Text);
+            if (IsValid)
+            {
+                var feedback = new Feedback
+                {
+                    Text = message.Text,
+                    CreationDate = DateTime.Now,
+                    ProfessorId = professorId,
+                    Rating = professorRate
+                };
+                _context.Feedbacks.Add(feedback);
+                _context.SaveChanges();
+                return true;
+            }
+            return false;
         }
         public bool ValidateFeedback(string text)
         {
-            
+            string lowerText = text.ToLower();
+            string path = "./Resources/Матюки.txt";
+            string[] readText;
+            using (var sr = new StreamReader(path))
+            {
+                readText = sr.ReadToEnd().Split(" ",StringSplitOptions.RemoveEmptyEntries);
+            }
+            foreach (var textItem in readText)
+            {
+                if (text.Contains(textItem))
+                {
+                    return false;
+                }
+            }
+            if (lowerText.Contains("лекции")|
+                lowerText.Contains("практические занятия")|
+                lowerText.Contains("конспект")|
+                lowerText.Contains("экзамен"))
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+            return true;
         }
 
     }

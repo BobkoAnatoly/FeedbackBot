@@ -15,3 +15,4 @@ C:\Users\User\source\repos\FeedbackBot\BusinesLogic\bin\Debug\net6.0\Model.pdb
 C:\Users\User\source\repos\FeedbackBot\BusinesLogic\obj\Debug\net6.0\BusinesLogic.csproj.CopyComplete
 C:\Users\User\source\repos\FeedbackBot\BusinesLogic\bin\Debug\net6.0\Common.dll
 C:\Users\User\source\repos\FeedbackBot\BusinesLogic\bin\Debug\net6.0\Common.pdb
+C:\Users\User\source\repos\FeedbackBot\BusinesLogic\bin\Debug\net6.0\Resources\Матюки.txt

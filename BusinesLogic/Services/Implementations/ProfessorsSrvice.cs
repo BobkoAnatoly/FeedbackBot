@@ -28,7 +28,8 @@ namespace BusinesLogic.Services.Implementations
                 for (int i = PROFESSORS_PER_PAGE * page - PROFESSORS_PER_PAGE; i < PROFESSORS_PER_PAGE * page; i++)
                 {
 
-                    text += i + 1 + ". " + professors[i].LastName + " " + professors[i].FirstName + " " + professors[i].Patronymic + "\n";
+                    text += i + 1 + ". " + professors[i].LastName + " " + professors[i].FirstName + 
+                        " " + professors[i].Patronymic + "\n";
                 }
                 return text;
             }
@@ -38,7 +39,8 @@ namespace BusinesLogic.Services.Implementations
                 for (int i = PROFESSORS_PER_PAGE * page - PROFESSORS_PER_PAGE; i < countOfProfessors; i++)
                 {
 
-                    text += i + 1 + ". " + professors[i].LastName + " " + professors[i].FirstName + " " + professors[i].Patronymic + "\n";
+                    text += i + 1 + ". " + professors[i].LastName + " " + professors[i].FirstName +
+                        " " + professors[i].Patronymic + "\n";
                 }
                 return text;
             }
@@ -55,11 +57,18 @@ namespace BusinesLogic.Services.Implementations
         }
         public Professor Get(string text)
         {
-            var professor = _context.Professors
-                .Include(x=>x.Feedbacks).ToList()
-                .FirstOrDefault(x => $"{x.FirstName}{x.LastName}{x.Patronymic}".ToLower().Contains(text.ToLower()));
-            if (professor == null) throw new Exception();
-            return professor;
+            text = text.Replace(" ", "").ToLower();
+            var professors = _context.Professors
+                .Include(x => x.Feedbacks).ToList();
+            foreach (var item in professors)
+            {
+                string fio = $"{item.LastName}{item.FirstName}{item.Patronymic}".ToLower();
+                if (fio.Contains(text))
+                {
+                    return item;
+                }
+            }
+            return null;
         }
     }
 }
